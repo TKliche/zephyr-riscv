@@ -327,6 +327,58 @@ static void uart_fe310_irq_handler(void *arg)
 
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
+/* XXX: hack */
+
+#include <clint.h>
+#include <platform.h>
+
+#define read_csr(reg) ({ unsigned long __tmp; \
+ __asm__ volatile ("csrr %0, " #reg : "=r"(__tmp)); \
+  __tmp; })
+
+static unsigned long mtime_lo(void)
+{
+  return *(volatile unsigned long *)(CLINT_BASE_ADDR + CLINT_MTIME);
+}
+
+static unsigned long __attribute__((noinline)) measure_cpu_freq(size_t n)
+{
+  unsigned long start_mtime, delta_mtime;
+  unsigned long mtime_freq = 32768;
+
+  // Don't start measuruing until we see an mtime tick
+  unsigned long tmp = mtime_lo();
+  do {
+    start_mtime = mtime_lo();
+  } while (start_mtime == tmp);
+
+  unsigned long start_mcycle = read_csr(mcycle);
+
+  do {
+    delta_mtime = mtime_lo() - start_mtime;
+  } while (delta_mtime < n);
+
+  unsigned long delta_mcycle = read_csr(mcycle) - start_mcycle;
+
+  return (delta_mcycle / delta_mtime) * mtime_freq
+         + ((delta_mcycle % delta_mtime) * mtime_freq) / delta_mtime;
+}
+
+unsigned long get_cpu_freq()
+{
+  static uint32_t cpu_freq;
+
+  if (!cpu_freq) {
+    // warm up I$
+    measure_cpu_freq(1);
+    // measure for real
+    cpu_freq = measure_cpu_freq(10);
+  }
+
+  return cpu_freq;
+}
+
+
 
 static int uart_fe310_init(struct device *dev)
 {
@@ -338,7 +390,7 @@ static int uart_fe310_init(struct device *dev)
 	uart->rxctrl = RXCTRL_RXEN | CTRL_CNT(cfg->txcnt_irq);
 
 	/* Set baud rate */
-	uart->div = cfg->sys_clk_freq / cfg->baud_rate - 1;
+	uart->div = get_cpu_freq() / cfg->baud_rate - 1;
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	/* Ensure that uart IRQ is disabled initially */

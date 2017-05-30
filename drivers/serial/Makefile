@@ -1,6 +1,9 @@
 ccflags-$(CONFIG_UART_QMSI) +=-I$(CONFIG_QMSI_INSTALL_PATH)/include
 ccflags-y +=-I$(srctree)/drivers
 
+#hack
+ccflags-y += -I$(srctree)/arch/riscv32/core
+
 obj-$(CONFIG_UART_NS16550)	+= uart_ns16550.o
 obj-$(CONFIG_UART_MCUX)		+= uart_mcux.o
 obj-$(CONFIG_UART_MCUX_LPUART)	+= uart_mcux_lpuart.o
